@@ -1,3 +1,14 @@
+1. install agentcore
+npm install -g @aws/agentcore
+agentcore --version
+
+2. verify aws-cli
+aws sts get-caller-identity
+
+3. agentcore create --name tooagentcore --framework Strands --model-provider Bedrock --defaults
+
+
+
 Here is a biz requirement:
 
 User uploads a file (text PDF, scanned image PDF, CSV, or regular image) -> system applies different preprocessing based on file type:
