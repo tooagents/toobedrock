@@ -1,3 +1,17 @@
 {
-  "targets": {}
+  "targets": {
+    "default": {
+      "resources": {
+        "runtimes": {
+          "tooglobal": {
+            "runtimeId": "tooagentcore_tooglobal-F5AXrmDgOZ",
+            "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:448776203057:runtime/tooagentcore_tooglobal-F5AXrmDgOZ",
+            "roleArn": "arn:aws:iam::448776203057:role/AgentCore-tooagentcore-de-ApplicationAgentTooglobal-sCch0oWZDg2U"
+          }
+        },
+        "stackName": "AgentCore-tooagentcore-default",
+        "deployHash": "d5ce581b322cd06a"
+      }
+    }
+  }
 }

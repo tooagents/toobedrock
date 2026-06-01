@@ -7,7 +7,12 @@ aws sts get-caller-identity
 
 3. agentcore create --name tooagentcore --framework Strands --model-provider Bedrock --defaults
 
+4. agentcore deploy
+    agentcore status
+    agentcore invoke "What's the return policy for audio products?" --stream
+    agentcore invoke "Tell me about product PROD-004" --stream
 
+5. 
 
 Here is a biz requirement:
 
