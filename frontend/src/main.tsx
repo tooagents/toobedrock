@@ -21,6 +21,7 @@ function readSavedConfig() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Partial<{
       endpoint: string;
+      apiKey: string;
       bearerToken: string;
       extraHeaders: string;
     }>;
@@ -29,11 +30,15 @@ function readSavedConfig() {
   }
 }
 
-function parseHeaders(extraHeaders: string, bearerToken: string) {
+function parseHeaders(extraHeaders: string, apiKey: string, bearerToken: string) {
   const headers: Record<string, string> = {
     "content-type": "application/json",
     accept: "text/plain, application/json, */*",
   };
+
+  if (apiKey.trim()) {
+    headers["x-api-key"] = apiKey.trim();
+  }
 
   if (bearerToken.trim()) {
     headers.authorization = `Bearer ${bearerToken.trim()}`;
@@ -51,12 +56,43 @@ function parseHeaders(extraHeaders: string, bearerToken: string) {
   return headers;
 }
 
+function decodeAgentCoreSse(text: string) {
+  const decoded = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim())
+    .map((value) => {
+      if (!value || value === "[DONE]") return "";
+      try {
+        return JSON.parse(value) as string;
+      } catch {
+        return value;
+      }
+    })
+    .join("");
+
+  return decoded || text;
+}
+
+function stripThinking(text: string) {
+  return text
+    .replace(/<thinking[\s\S]*?<\/thinking>/gi, "")
+    .replace(/^\s+/, "");
+}
+
+function normalizeAgentText(text: string, contentType: string) {
+  if (contentType.includes("json")) return formatBody(text, contentType);
+  return stripThinking(decodeAgentCoreSse(text));
+}
+
 async function readResponse(response: Response, onChunk: (chunk: string) => void) {
   const contentType = response.headers.get("content-type") || "";
+  let raw = "";
 
   if (!response.body) {
     const text = await response.text();
-    onChunk(formatBody(text, contentType));
+    onChunk(normalizeAgentText(text, contentType));
     return;
   }
 
@@ -66,11 +102,15 @@ async function readResponse(response: Response, onChunk: (chunk: string) => void
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    onChunk(decoder.decode(value, { stream: true }));
+    raw += decoder.decode(value, { stream: true });
+    onChunk(normalizeAgentText(raw, contentType));
   }
 
   const tail = decoder.decode();
-  if (tail) onChunk(tail);
+  if (tail) {
+    raw += tail;
+    onChunk(normalizeAgentText(raw, contentType));
+  }
 }
 
 function formatBody(text: string, contentType: string) {
@@ -85,7 +125,10 @@ function formatBody(text: string, contentType: string) {
 
 function App() {
   const savedConfig = useMemo(readSavedConfig, []);
-  const [endpoint, setEndpoint] = useState(savedConfig.endpoint || "");
+  const [endpoint, setEndpoint] = useState(
+    savedConfig.endpoint || import.meta.env.VITE_AGENT_ENDPOINT || "",
+  );
+  const [apiKey, setApiKey] = useState(savedConfig.apiKey || "");
   const [bearerToken, setBearerToken] = useState(savedConfig.bearerToken || "");
   const [extraHeaders, setExtraHeaders] = useState(savedConfig.extraHeaders || "");
   const [prompt, setPrompt] = useState(SAMPLE_PROMPTS[0]);
@@ -97,9 +140,9 @@ function App() {
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ endpoint, bearerToken, extraHeaders }),
+      JSON.stringify({ endpoint, apiKey, bearerToken, extraHeaders }),
     );
-  }, [endpoint, bearerToken, extraHeaders]);
+  }, [endpoint, apiKey, bearerToken, extraHeaders]);
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -129,7 +172,7 @@ function App() {
 
     try {
       const started = performance.now();
-      const headers = parseHeaders(extraHeaders, bearerToken);
+      const headers = parseHeaders(extraHeaders, apiKey, bearerToken);
       const response = await fetch(trimmedEndpoint, {
         method: "POST",
         headers,
@@ -148,7 +191,7 @@ function App() {
         setMessages((current) =>
           current.map((message) =>
             message.id === agentMessage.id
-              ? { ...message, content: message.content + chunk }
+              ? { ...message, content: chunk }
               : message,
           ),
         );
@@ -190,7 +233,7 @@ function App() {
     <main className="app-shell">
       <section className="topbar">
         <div>
-          <h1>TooAgentCore Tester</h1>
+          <h1>TooAgentCore </h1>
           <p>Send prompts to the deployed customer-support agent and inspect streamed replies.</p>
         </div>
         <div className="status-pill">{lastStatus}</div>
@@ -201,9 +244,19 @@ function App() {
           <label>
             Agent endpoint
             <input
-              placeholder="https://your-agent-or-proxy.example.com/invoke"
+              placeholder="https://your-lambda-url.lambda-url.us-east-1.on.aws/"
               value={endpoint}
               onChange={(event) => setEndpoint(event.target.value)}
+            />
+          </label>
+
+          <label>
+            API key
+            <input
+              type="password"
+              placeholder="FRONTEND_API_KEY"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
             />
           </label>
 
@@ -211,7 +264,7 @@ function App() {
             Bearer token
             <input
               type="password"
-              placeholder="Optional"
+              placeholder="Optional, for future JWT mode"
               value={bearerToken}
               onChange={(event) => setBearerToken(event.target.value)}
             />
