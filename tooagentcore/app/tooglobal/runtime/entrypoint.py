@@ -3,7 +3,7 @@ from typing import Any
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-from agent import get_or_create_agent
+from tooagentcore.app.tooglobal.agent.agent import get_or_create_agent
 
 app = BedrockAgentCoreApp()
 log = app.logger
